@@ -1,0 +1,5 @@
+                /*if (mechanicalProperties.found("stabilization"))
+                {
+                    #include "stabilization.H"
+                    DEqn += stabilizationTerm*epss;
+                }*/

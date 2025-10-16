@@ -1,0 +1,68 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  7  
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      CPLG;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 -3 0 0 1 0 0];//mol m^-3
+
+internalField   uniform 2.2e-3;
+
+boundaryField
+{
+    OUTLET
+    {
+        type            zeroGradient;
+    }
+
+    WALL1
+    {
+        type            zeroGradient;
+    }
+    WALL2
+    {
+        type            zeroGradient;
+    }
+
+
+
+   
+    FRONTBACK1
+    {
+        type            empty;
+    }
+    FRONTBACK2
+    {
+        type            empty;
+    }
+
+
+
+    INLET
+    {
+        type            uniformFixedValue;
+        uniformValue
+        {
+            type              csvFile;
+            nHeaderLine       0;
+            refColumn         0;
+            componentColumns  (2);
+            separator         ",";
+            mergeSeparators   no;
+            file              "concentrations.csv";
+        }
+
+    }
+}
+
+// ************************************************************************* //

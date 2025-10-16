@@ -1,0 +1,145 @@
+// Get displacement field
+volVectorField& D = mesh_.lookupObject<volVectorField>("D");
+
+// Calculate deformation gradient F = I + grad(D)
+volTensorField F = I + fvc::grad(D);
+    
+// Calculate the Jacobian of the deformation gradient
+volScalarField J(det(F));
+    
+// Calculate the volume preserving right Cauchy Green tensor
+volTensorField C(F.T() & F);
+    
+// Define Fbar := J^(-1/3)*F
+volTensorField Fbar(pow(J, -1.0/3.0)*F);
+    
+// Define Cbar := J^(-2/3)*C
+volTensorField Cbar(pow(J, -2.0/3.0)*C);
+    
+// Take references to the internal fields for efficiency
+tensorField& CI = C.primitiveField();
+scalarField& JI = J.primitiveField();
+symmTensorField& transformNeededI = transformNeeded_.primitiveFieldRef();
+    
+// Partial derive of WBar(CBar), internalField operation
+vector eigenValues = vector::zero;
+vector eigenValuesBar = vector::zero;
+    
+forAll(transformNeededI, cellI)
+{
+    // Calculate principal stretches: lambda^2, which are eigenvalues of C
+    eigenValues = Foam::eigenValues(CI[cellI]);
+        
+    // Calculate modified principal stretches
+    eigenValuesBar.x() = pow(JI[cellI], -1.0/3)*sqrt(eigenValues.x());
+    eigenValuesBar.y() = pow(JI[cellI], -1.0/3)*sqrt(eigenValues.y());
+    eigenValuesBar.z() = pow(JI[cellI], -1.0/3)*sqrt(eigenValues.z());
+        
+    transformNeededI[cellI].xx() =
+        mu0_.value()*pow(eigenValuesBar.x(), alpha_[0] - 1)
+      + mu1_.value()*pow(eigenValuesBar.x(), alpha_[1] - 1)
+      + mu2_.value()*pow(eigenValuesBar.x(), alpha_[2] - 1);
+        
+    transformNeededI[cellI].yy() =
+        mu0_.value()*pow(eigenValuesBar.y(), alpha_[0] - 1)
+      + mu1_.value()*pow(eigenValuesBar.y(), alpha_[1] - 1)
+      + mu2_.value()*pow(eigenValuesBar.y(), alpha_[2] - 1);
+        
+    transformNeededI[cellI].zz() =
+        mu0_.value()*pow(eigenValuesBar.z(), alpha_[0] - 1)
+      + mu1_.value()*pow(eigenValuesBar.z(), alpha_[1] - 1)
+      + mu2_.value()*pow(eigenValuesBar.z(), alpha_[2] - 1);
+}
+    
+    // Partial derive of WBar(CBar), boundaryField operation
+    forAll(C.boundaryField(), patchI)
+    {
+        // Take references to the patch fields for efficiency
+        tensorField& CP = C.boundaryField()[patchI];
+        scalarField& JP = J.boundaryField()[patchI];
+        symmTensorField& transformNeededP = transformNeeded_.boundaryFieldRef()[patchI];
+        
+        forAll(CP, faceI)
+        {
+            // Calculate principal stretches: lambda^2, which are eigenvalues of C
+            eigenValues = Foam::eigenValues(CP[faceI]);
+            
+            // Calculate modified principal stretches
+            eigenValuesBar.x() = pow(JP[faceI], -1.0/3)*sqrt(eigenValues.x());
+            eigenValuesBar.y() = pow(JP[faceI], -1.0/3)*sqrt(eigenValues.y());
+            eigenValuesBar.z() = pow(JP[faceI], -1.0/3)*sqrt(eigenValues.z());
+            
+            transformNeededP[faceI].xx() =
+                mu0_.value()*pow(eigenValuesBar.x(), alpha_[0] - 1)
+              + mu1_.value()*pow(eigenValuesBar.x(), alpha_[1] - 1)
+              + mu2_.value()*pow(eigenValuesBar.x(), alpha_[2] - 1);
+            
+            transformNeededP[faceI].yy() =
+                mu0_.value()*pow(eigenValuesBar.y(), alpha_[0] - 1)
+              + mu1_.value()*pow(eigenValuesBar.y(), alpha_[1] - 1)
+              + mu2_.value()*pow(eigenValuesBar.y(), alpha_[2] - 1);
+            
+            transformNeededP[faceI].zz() =
+                mu0_.value()*pow(eigenValuesBar.z(), alpha_[0] - 1)
+              + mu1_.value()*pow(eigenValuesBar.z(), alpha_[1] - 1)
+              + mu2_.value()*pow(eigenValuesBar.z(), alpha_[2] - 1);
+        }
+    }
+    
+    // 2 * FBar * (Partial Cbar of Partial WBar) * FBar.T()
+    // Manual transform: F & S & F.T()
+    transformFbar_ = 2*symm(Fbar & transformNeeded_ & Fbar.T());
+    
+    // dev operation
+    sigma = dev(transformFbar_);
+    
+    // Calculate initial stress
+    volTensorField invFbar(inv(Fbar));
+    // Manual transform: invFbar & sigma & invFbar.T()
+    s_ = symm(invFbar & sigma & invFbar.T());
+    
+    // Update internal stress variables, representing stress relaxations for
+    // each Maxwell model
+    scalar deltaT = mesh_.time().deltaTValue();
+    
+    forAll(H_, MaxwellModelI)
+    {
+        H_[MaxwellModelI] =
+            Foam::exp(-deltaT/tau_[MaxwellModelI])*h_[MaxwellModelI].oldTime()
+          - Foam::exp(-deltaT/(2.0*tau_[MaxwellModelI]))*s_.oldTime();
+    }
+    
+    forAll(h_, MaxwellModelI)
+    {
+        h_[MaxwellModelI] =
+            H_[MaxwellModelI]
+          + Foam::exp(-deltaT/(2.0*tau_[MaxwellModelI]))*s_;
+    }
+    
+    // Calculate the current total stress, where the volumetric term is
+    // elastic and the deviatoric term is viscoelastic
+    scalar gRelax = gammaInf_;
+    
+    forAll(gamma_, MaxwellModelI)
+    {
+        gRelax += gamma_[MaxwellModelI]*Foam::exp(-deltaT/(2*tau_[MaxwellModelI]));
+    }
+    
+    // Calculate hydrostatic pressure, defined in (G. A. HOLZAPFEL,1996)
+    volScalarField pressure
+    (
+        K_*(1.0/(beta_.value()*J))*(1 - pow(J, -beta_.value()))
+    );
+    
+    sigma += J*pressure*I + gRelax*sigma;
+    
+    forAll(H_, MaxwellModelI)
+    {
+        // Manual transform: Fbar & H & Fbar.T()
+        transformH_[MaxwellModelI] = symm(Fbar & H_[MaxwellModelI] & Fbar.T());
+    }
+    
+    forAll(transformH_, MaxwellModelI)
+    {
+        sigma += gamma_[MaxwellModelI]*dev(transformH_[MaxwellModelI]);
+    }

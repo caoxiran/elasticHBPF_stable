@@ -1,0 +1,14 @@
+smoothSolver:  Solving for Dx, Initial residual = 1, Final residual = 0.899664, No Iterations 4
+smoothSolver:  Solving for Dy, Initial residual = 1, Final residual = 0.872129, No Iterations 1
+#0  Foam::error::printStack(Foam::Ostream&) at ??:?
+#1  Foam::sigFpe::sigHandler(int) at ??:?
+#2  ? in "/lib/x86_64-linux-gnu/libc.so.6"
+#3  ? in "/lib/x86_64-linux-gnu/libm.so.6"
+#4  powf64 in "/lib/x86_64-linux-gnu/libm.so.6"
+#5  Foam::pow(Foam::Field<double>&, Foam::UList<double> const&, double const&) at ??:?
+#6  Foam::tmp<Foam::GeometricField<double, Foam::fvPatchField, Foam::volMesh> > Foam::pow<Foam::fvPatchField, Foam::volMesh>(Foam::GeometricField<double, Foam::fvPatchField, Foam::volMesh> const&, Foam::dimensioned<double> const&) in "/public/newhome/cxr/OpenFOAM/cxr-7/platforms/linux64GccDPInt32Opt/bin/elasticHBPFThrombolytic_chemical_mechanical_stable"
+#7  ? in "/public/newhome/cxr/OpenFOAM/cxr-7/platforms/linux64GccDPInt32Opt/bin/elasticHBPFThrombolytic_chemical_mechanical_stable"
+#8  __libc_start_main in "/lib/x86_64-linux-gnu/libc.so.6"
+#9  ? in "/public/newhome/cxr/OpenFOAM/cxr-7/platforms/linux64GccDPInt32Opt/bin/elasticHBPFThrombolytic_chemical_mechanical_stable"
+浮点数例外 (核心已转储)
+
